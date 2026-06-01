@@ -14,3 +14,4 @@ streamlit
 mediapipe>=0.10.30
 opencv-python-headless==4.9.0.80
 protobuf>=4.25.3
+pytz
