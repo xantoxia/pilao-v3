@@ -22,35 +22,30 @@ import pytz
 # ---------------------- 1. 基础配置 ----------------------
 st.set_page_config(page_title="疲劳评估系统", layout="wide")
 
-# ---------------------- 页面紧凑样式（已修复页首被遮挡问题） ----------------------
+# ---------------------- 页面紧凑样式（修复顶部+底部遮挡） ----------------------
 st.markdown("""
 <style>
-/* 整体页面边距：增加顶部内边距，避免标题被遮挡 */
 .block-container {
-    padding-top: 2.5rem; /* 把这里从 1rem 改成 2.5rem */
-    padding-bottom: 1rem;
+    padding-top: 2.5rem !important;
+    padding-bottom: 6rem !important;
     max-width: 1000px;
 }
-
-/* 标题和正文间距 */
 h1, h2, h3, h4 {
     margin-top: 0.5rem;
     margin-bottom: 0.5rem;
 }
-
-/* 滑块和控件之间的间距 */
 .stSlider, .stNumberInput, .stSelectbox {
     margin-bottom: 0.3rem;
 }
-
-/* 折叠面板（图片识别）的内边距 */
 .stExpander {
     padding: 0.2rem 1rem;
 }
-
-/* 列之间的间距 */
 div[data-testid="column"] {
     padding: 0 0.5rem;
+}
+.stChatInputContainer {
+    position: relative !important;
+    bottom: 0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -64,57 +59,14 @@ FILE_PATH = 'fatigue_data.csv'
 
 # 字体配置
 font_path = "SourceHanSansCN-Normal.otf"
+font_prop = None
 if os.path.exists(font_path):
     font_prop = font_manager.FontProperties(fname=font_path)
     font_name = font_prop.get_name()
     plt.rcParams['font.sans-serif'] = [font_name]
     plt.rcParams['axes.unicode_minus'] = False
 
-# ---------------------- 模型训练与性能评估模块（来自你最初的代码） ----------------------
-# 读取训练数据
-file_path = 'corrected_fatigue_simulation_data_Chinese.csv'
-if os.path.exists(file_path):
-    data = pd.read_csv(file_path, encoding='gbk')
-    # 1. Features and labels
-    X = data.drop(columns=["疲劳等级"])
-    y = data["疲劳等级"]
-    # Normalize column names to avoid spaces
-    X.columns = X.columns.str.replace(' ', '_')
-    # 2. Data split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    # 3. Model training
-    model_train = RandomForestClassifier(random_state=42)
-    model_train.fit(X_train, y_train)
-    # 4. Predictions
-    y_pred = model_train.predict(X_test)
-    # 5. Evaluation
-    accuracy = accuracy_score(y_test, y_pred)
-    conf_matrix = confusion_matrix(y_test, y_pred)
-    report = classification_report(y_test, y_pred)
-    # Feature importance
-    feature_importances = model_train.feature_importances_
-    importance_df = pd.DataFrame({
-        "Feature": X.columns,
-        "Importance": feature_importances
-    }).sort_values(by="Importance", ascending=False)
-    # Create feature importance plot
-    fig, ax = plt.subplots(figsize=(10, 6))
-    sns.barplot(x="Importance", y="Feature", data=importance_df, palette="viridis", ax=ax)
-    ax.set_title("Feature Importance in Fatigue Classification")
-    ax.set_xlabel("Importance Score")
-    ax.set_ylabel("Features")
-    def set_font_properties(ax, font_prop):
-        for label in ax.get_xticklabels() + ax.get_yticklabels():
-            label.set_fontproperties(font_prop)
-        ax.title.set_fontproperties(font_prop)
-        ax.xaxis.label.set_fontproperties(font_prop)
-        ax.yaxis.label.set_fontproperties(font_prop)
-    if 'font_prop' in locals():
-        set_font_properties(ax, font_prop)
-else:
-    st.warning("⚠️ 训练数据文件 corrected_fatigue_simulation_data_Chinese.csv 未找到，模型性能模块将不可用")
-
-# ---------------------- 2. 模型加载（已修复：找不到也不崩） ----------------------
+# ---------------------- 2. 模型加载 ----------------------
 model = None
 try:
     @st.cache_resource
@@ -128,7 +80,7 @@ except:
 # ---------------------- 3. 图片角度识别模块 ----------------------
 def load_pose_models():
     mp_pose = mp.solutions.pose
-    mp_hands = mp.solutions.hands
+    mp_hands = mp.hands
     pose = mp_pose.Pose(min_detection_confidence=0.8, min_tracking_confidence=0.8)
     hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7)
     return mp_pose, mp_hands, pose, hands
@@ -235,7 +187,6 @@ def process_image(image):
                 side = '左侧' if hand.landmark[0].x < 0.5 else '右侧'
                 joints[side].update({'手腕': get_coord(hand.landmark[mp_hands.HandLandmark.WRIST], 'hands', W, H), '食指中节': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP], 'hands', W, H), '食指尖端': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP], 'hands', W, H)})
 
-        # 单独计算角度，每一步都容错，不影响其他数据
         metrics['angles']['颈部前屈'] = calculate_neck_flexion(joints['鼻子'], joints['mid']['肩膀'], joints['mid']['臀部'])
         metrics['angles']['背部屈曲'] = calculate_trunk_flexion(joints['mid']['肩膀'], joints['mid']['臀部'], joints['mid']['膝部'])
 
@@ -247,7 +198,6 @@ def process_image(image):
                 metrics['angles'][f'{side} 手腕背伸'] = calculate_angle(joints[side]['肘部'], joints[side]['手腕'], joints[side]['食指尖端'], 'sagittal')
                 metrics['angles'][f'{side} 手腕桡偏'] = calculate_angle(joints[side]['食指中节'], joints[side]['手腕'], joints[side]['食指尖端'], 'frontal')
 
-        # 绘制骨骼（也单独容错）
         try:
             draw_landmarks(image, joints)
         except:
@@ -324,7 +274,6 @@ def calculate_score(answer):
     elif answer == '经常': return 3
     else: return 4
 
-# ---------------------- 修复：模型不存在也能正常评估 ----------------------
 def fatigue_prediction(input_data):
     global model
     if model is not None:
@@ -348,165 +297,80 @@ def call_ark_api(client, messages):
     except Exception as e:
         st.error(f"API 调用错误: {str(e)}")
 
-# ---------------------- 侧边栏：模型性能 & 标准参考 ----------------------
-with st.sidebar:
-    if 'accuracy' in locals():
-        show_model_perf = st.checkbox("模型性能")
-    else:
-        show_model_perf = False
-    show_std_ref = st.checkbox("标准参考")
+# ---------------------- 5. 侧边栏：模型性能 + 标准参考 ----------------------
+if st.sidebar.checkbox("📊 模型性能"):
+    st.subheader("模型性能评估")
+    try:
+        data = pd.read_csv('corrected_fatigue_simulation_data_Chinese.csv', encoding='gbk')
+        X = data.drop(columns=["疲劳等级"])
+        y = data["疲劳等级"]
+        X.columns = X.columns.str.replace(' ', '_')
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        model_eval = RandomForestClassifier(random_state=42)
+        model_eval.fit(X_train, y_train)
+        y_pred = model_eval.predict(X_test)
+        accuracy = accuracy_score(y_test, y_pred)
+        conf_matrix = confusion_matrix(y_test, y_pred)
+        report = classification_report(y_test, y_pred)
+        importance_df = pd.DataFrame({"Feature": X.columns, "Importance": model_eval.feature_importances_}).sort_values(by="Importance", ascending=False)
 
-# 模型性能模块（来自你最初的代码）
-if show_model_perf and 'accuracy' in locals():
-    st.subheader("📊 模型评估")
-    # 准确率卡片
-    st.markdown("""
-    <div style="
-        background-color: #F0F2F6;
-        padding: 20px;
-        border-radius: 10px;
-        text-align: center;
-        margin-bottom: 20px;
-    ">
-        <div style="
-            font-size: 32px;
-            font-weight: bold;
-            color: #2E86C1;
-        ">
-            {:.2f}%
-        </div>
-        <div style="
-            font-size: 16px;
-            color: #666;
-        ">
-            准确性
-        </div>
-    </div>
-    """.format(accuracy * 100), unsafe_allow_html=True)
+        st.metric("模型准确率", f"{accuracy*100:.2f}%")
+        st.text("分类报告：")
+        st.text(report)
 
-    # 混淆矩阵
-    st.markdown("### 混淆矩阵")
-    fig_conf, ax_conf = plt.subplots()
-    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", ax=ax_conf)
-    ax_conf.set_xlabel("Predicted")
-    ax_conf.set_ylabel("Actual")
-    ax_conf.set_title("Confusion Matrix")
-    st.pyplot(fig_conf)
+        fig_conf, ax_conf = plt.subplots(figsize=(6,4))
+        sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", ax=ax_conf)
+        ax_conf.set_xlabel("Predicted")
+        ax_conf.set_ylabel("Actual")
+        ax_conf.set_title("混淆矩阵")
+        if font_prop:
+            for label in ax_conf.get_xticklabels() + ax_conf.get_yticklabels():
+                label.set_fontproperties(font_prop)
+        st.pyplot(fig_conf)
 
-    # 特征重要性
-    st.markdown("### 特征重要性")
-    st.pyplot(fig)
+        fig_imp, ax_imp = plt.subplots(figsize=(6,4))
+        sns.barplot(x="Importance", y="Feature", data=importance_df, palette="viridis", ax=ax_imp)
+        ax_imp.set_title("特征重要性")
+        if font_prop:
+            for label in ax_imp.get_xticklabels() + ax_imp.get_yticklabels():
+                label.set_fontproperties(font_prop)
+        st.pyplot(fig_imp)
+    except Exception as e:
+        st.warning(f"模型性能数据加载失败：{e}")
 
-    st.markdown("""
-    <div style="
-        background-color: #E8F5E9;
-        padding: 15px;
-        border-radius: 10px;
-        color: #2E7D32;
-        margin-top: 20px;
-    ">
-        💡 提示：
-        <ul>
-            <li>混淆矩阵显示了模型的预测结果与实际标签的对比。对角线上的值表示正确预测的数量。</li>
-            <li>特征重要性图展示了每个特征对模型预测的贡献程度。</li>
-        </ul>
-    </div>
-    """, unsafe_allow_html=True)
-
-# 标准参考模块（来自你最初的代码）
-if show_std_ref:
+if st.sidebar.checkbox("📋 标准参考"):
     st.markdown("""
     <style>
-        .header {
-            font-size: 24px;
-            font-weight: bold;
-            color: #2E86C1;
-            margin-bottom: 20px;
-        }
-        .section-title {
-            font-size: 20px;
-            font-weight: bold;
-            color: #1A5276;
-            margin-top: 20px;
-            margin-bottom: 10px;
-        }
-        .sub-section {
-            margin-left: 20px;
-            margin-bottom: 10px;
-        }
-        .note {
-            font-style: italic;
-            color: #666;
-            margin-top: 5px;
-        }
-        .highlight {
-            color: #E74C3C;
-            font-weight: bold;
-        }
-        .footer {
-            margin-top: 30px;
-            font-size: 14px;
-            color: #888;
-        }
+    .section-title {font-size:18px; font-weight:bold; color:#2E86C1; margin-top:15px;}
+    .sub-section {margin-left:10px; margin-bottom:8px;}
+    .highlight {color:#E74C3C; font-weight:bold;}
     </style>
-
-    <div class="header">人体各部位动作舒适范围参考指南</div>
-    <div class="note">为了帮助您在日常工作或活动中保持健康的姿势，减少肌肉疲劳和关节损伤风险，以下是根据国际人因工程标准（如ISO 11226、ISO 9241等）整理的人体各部位动作舒适范围建议。请参考这些数据，优化您的姿势和工作环境设计。</div>
-
     <div class="section-title">1. 颈部</div>
     <div class="sub-section">
-        - <span class="highlight">前屈（低头）</span>：0°~20°<br>
-          <div class="note">（长时间前屈＞20°可能导致颈椎压力累积）</div>
-        - <span class="highlight">后仰（抬头）</span>：0°~15°<br>
-          <div class="note">（＞15°可能增加颈椎间盘压力，需避免静态保持）</div>
+    - <span class="highlight">前屈：0°~20°</span><br>
+    - <span class="highlight">后仰：0°~15°</span>
     </div>
-
     <div class="section-title">2. 肩部</div>
     <div class="sub-section">
-        - <span class="highlight">上举（手臂抬高）</span>：0°~90°<br>
-          <div class="note">（持续上举＞90°显著增加肩袖损伤风险，动态操作可偶尔达120°但需减少频率）</div>
-        - <span class="highlight">前伸（手臂前伸）</span>：0°~30°<br>
-          <div class="note">（＞30°易导致肩部肌肉疲劳，重复性任务应控制在15°以内）</div>
+    - <span class="highlight">上举：0°~90°</span><br>
+    - <span class="highlight">前伸：0°~30°</span>
     </div>
-
     <div class="section-title">3. 肘部</div>
     <div class="sub-section">
-        - <span class="highlight">屈伸（弯曲/伸直）</span>：60°~120°<br>
-          <div class="note">（完全伸展或过度弯曲（如＞120°）会增加肌腱压力，中立位更安全）</div>
+    - <span class="highlight">屈伸：60°~120°</span>
     </div>
-
     <div class="section-title">4. 手腕</div>
     <div class="sub-section">
-        - <span class="highlight">背伸（手腕向上）</span>：0°~25°<br>
-          <div class="note">（＞25°可能压迫腕管，ISO建议保持中立位附近）</div>
-        - <span class="highlight">桡偏/尺偏（左右偏转）</span>：0°~15°<br>
-          <div class="note">（超过15°容易造成腕管综合征或肌腱问题，需避免重复性极端偏转）</div>
+    - <span class="highlight">背伸：0°~25°</span><br>
+    - <span class="highlight">桡偏/尺偏：0°~15°</span>
     </div>
-
-    <div class="section-title">5. 背部（腰椎）</div>
+    <div class="section-title">5. 背部</div>
     <div class="sub-section">
-        - <span class="highlight">屈曲（弯腰）</span>：0°~20°<br>
-          <div class="note">（＞20°显著增加椎间盘压力，需配合髋关节活动以减少负荷）</div>
+    - <span class="highlight">屈曲：0°~20°</span>
     </div>
-
-    <div class="section-title">附加建议</div>
-    <div class="sub-section">
-        - <span class="highlight">动态任务</span>：优先采用中关节活动范围（如肩部上举60°~90°），避免极端姿势。<br>
-        - <span class="highlight">静态保持</span>：任何姿势超过2分钟需设计支撑（如肘托、腰靠）。<br>
-        - <span class="highlight">人机交互</span>：调整工作站高度、键盘倾斜度等，使关节自然接近中立位。
-    </div>
-
-    <div class="section-title">健康建议</div>
-    <div class="sub-section">
-        - 定期调整姿势，避免长时间保持同一姿势。<br>
-        - 使用符合人因工程设计的工具和设备（如可调节桌椅、腕托等）。<br>
-        - 结合适当的伸展运动，缓解肌肉疲劳。
-    </div>
-
-    <div class="footer">通过遵循以上建议，您可以有效减少肌肉骨骼疾病的风险，提升工作效率和舒适度。</div>
     """, unsafe_allow_html=True)
 
-# ---------------------- 5. 主页面布局 ----------------------
+# ---------------------- 6. 主页面布局 ----------------------
 st.markdown("<h1 style='text-align: center;'>疲劳评估系统（一体化版）</h1>", unsafe_allow_html=True)
 st.markdown("""该工具依据国际标准ISO 11226（静态工作姿势）、美国国家职业安全健康研究所的《手动材料处理指南》以及OWAS分析与建议等多套国际标准和规范，对工作过程中的疲劳状态进行科学评估，支持「图片识别自动填数」和「手动输入角度数据」两种方式进行疲劳评估。""")
 
@@ -518,6 +382,8 @@ if 'elbow_flexion' not in st.session_state: st.session_state.elbow_flexion = 120
 if 'wrist_extension' not in st.session_state: st.session_state.wrist_extension = 15
 if 'wrist_deviation' not in st.session_state: st.session_state.wrist_deviation = 10
 if 'back_flexion' not in st.session_state: st.session_state.back_flexion = 20
+if "messages" not in st.session_state: st.session_state.messages = []
+if "client" not in st.session_state: st.session_state.client = None
 
 # ---------------------- 模块1：图片角度识别 ----------------------
 with st.expander("📸 可选：上传图片自动识别角度（点击展开）"):
@@ -603,26 +469,47 @@ if st.button("开始 AI 分析"):
     if "result" not in st.session_state:
         st.warning("请先完成疲劳评估！")
     else:
-        API_KEY = st.secrets["API_KEY"]
-        client = OpenAI(api_key=API_KEY, base_url="https://api.siliconflow.cn/v1")
-        st.session_state.client = client
-        st.session_state.messages = [
-            {"role": "system", "content": "你是人因工程专家，依据ISO 11226提供专业建议。"},
-            {"role": "user", "content": f"用户目前{body_fatigue}身体无力，{cognitive_fatigue}影响睡眠，{emotional_fatigue}肌肉不适。关节角度：颈部前屈{neck_flexion}°，后仰{neck_extension}°，肩部上举{shoulder_elevation}°，前伸{shoulder_forward}°，肘部{elbow_flexion}°，手腕背伸{wrist_extension}°，桡偏{wrist_deviation}°，背部屈曲{back_flexion}°。请分析风险并给出改善建议。"}
-        ]
-        with st.spinner("AI分析中..."):
-            response = ""
-            for partial in call_ark_api(client, st.session_state.messages):
-                response += partial
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.markdown("### 📝 AI 分析结果")
-            st.markdown(response)
+        try:
+            API_KEY = st.secrets["API_KEY"]
+            client = OpenAI(api_key=API_KEY, base_url="https://api.siliconflow.cn/v1")
+            st.session_state.client = client
+            st.session_state.messages = [
+                {"role": "system", "content": "你是人因工程专家，依据ISO 11226提供专业建议。"},
+                {"role": "user", "content": f"用户目前{body_fatigue}身体无力，{cognitive_fatigue}影响睡眠，{emotional_fatigue}肌肉不适。关节角度：颈部前屈{neck_flexion}°，后仰{neck_extension}°，肩部上举{shoulder_elevation}°，前伸{shoulder_forward}°，肘部{elbow_flexion}°，手腕背伸{wrist_extension}°，桡偏{wrist_deviation}°，背部屈曲{back_flexion}°。请分析风险并给出改善建议。"}
+            ]
+            with st.spinner("AI分析中..."):
+                response = ""
+                for partial in call_ark_api(client, st.session_state.messages):
+                    response += partial
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                st.markdown("### 📝 AI 分析结果")
+                st.markdown(response)
+        except Exception as e:
+            st.error(f"API 初始化失败：{e}")
 
-# 聊天记录显示
+# ---------------------- 永远显示的聊天框（修复后） ----------------------
+prompt = st.chat_input("继续咨询人因工程问题：")
+if prompt:
+    if not st.session_state.client:
+        try:
+            API_KEY = st.secrets["API_KEY"]
+            st.session_state.client = OpenAI(api_key=API_KEY, base_url="https://api.siliconflow.cn/v1")
+        except Exception as e:
+            st.error(f"API 初始化失败：{e}")
+            st.stop()
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.spinner("思考中..."):
+        full_response = ""
+        for chunk in call_ark_api(st.session_state.client, st.session_state.messages):
+            full_response += chunk
+        st.session_state.messages.append({"role": "assistant", "content": full_response})
+
+# 显示聊天记录
 def display_chat_messages():
     if "messages" in st.session_state:
         for msg in st.session_state.messages:
             if msg["role"] != "system":
                 with st.chat_message(msg["role"]):
                     st.markdown(msg["content"])
+
 display_chat_messages()
