@@ -464,6 +464,23 @@ if st.button("开始评估", type="primary"):
         upload_to_github(FILE_PATH)
         st.session_state.result = result
 
+        # 保存评估记录，用于显示「所有评估记录」表格
+        record = input_data.copy()
+        record["评估结果"] = result
+        record["主观身体感受"] = body_fatigue
+        record["主观睡眠影响"] = cognitive_fatigue
+        record["主观肌肉酸痛"] = emotional_fatigue
+        st.session_state.predictions.append(record)
+        
+# ---------------------- 显示所有评估记录（加回你原来的功能） ----------------------
+if 'predictions' not in st.session_state:
+    st.session_state.predictions = []
+
+if st.session_state.predictions:
+    st.subheader("📋 所有评估记录")
+    prediction_df = pd.concat(st.session_state.predictions, ignore_index=True)
+    st.dataframe(prediction_df, use_container_width=True)
+    
 # ---------------------- 模块3：AI 分析 ----------------------
 if st.button("开始 AI 分析"):
     if "result" not in st.session_state:
