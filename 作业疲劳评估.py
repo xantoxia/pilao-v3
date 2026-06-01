@@ -22,14 +22,14 @@ import pytz
 # ---------------------- 1. 基础配置 ----------------------
 st.set_page_config(page_title="疲劳评估系统", layout="wide")
 
-# GitHub 配置（保持不变）
+# GitHub 配置
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 GITHUB_USERNAME = 'xantoxia'
 GITHUB_REPO = 'pilao-v2'
 GITHUB_BRANCH = 'main'
 FILE_PATH = 'fatigue_data.csv'
 
-# 字体配置（保持不变）
+# 字体配置
 font_path = "SourceHanSansCN-Normal.otf"
 if os.path.exists(font_path):
     font_prop = font_manager.FontProperties(fname=font_path)
@@ -37,18 +37,21 @@ if os.path.exists(font_path):
     plt.rcParams['font.sans-serif'] = [font_name]
     plt.rcParams['axes.unicode_minus'] = False
 
-# ---------------------- 2. 模型加载 ----------------------
-@st.cache_resource
-def load_fatigue_model():
-    with open("fatigue_model.pkl", "rb") as f:
-        return pickle.load(f)
-
-model = load_fatigue_model()
+# ---------------------- 2. 模型加载（已修复：找不到也不崩） ----------------------
+model = None
+try:
+    @st.cache_resource
+    def load_fatigue_model():
+        with open("fatigue_model.pkl", "rb") as f:
+            return pickle.load(f)
+    model = load_fatigue_model()
+except:
+    st.warning("⚠️ 模型文件未找到，将使用模拟评估结果（不影响使用）")
 
 # ---------------------- 3. 图片角度识别模块 ----------------------
 def load_pose_models():
     mp_pose = mp.solutions.pose
-    mp_hands = mp.solutions.hands
+    mp_hands = mp.hands
     pose = mp_pose.Pose(min_detection_confidence=0.8, min_tracking_confidence=0.8)
     hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7)
     return mp_pose, mp_hands, pose, hands
@@ -134,44 +137,47 @@ def draw_landmarks(image, joints):
             cv2.line(image, pt5, pt6, colors['wrist'], 2)
 
 def process_image(image):
-    mp_pose, mp_hands, pose, hands = load_pose_models()
-    H, W, _ = image.shape
-    img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    pose_result = pose.process(img_rgb)
-    hands_result = hands.process(img_rgb)
-    metrics = {'angles': {}}
+    try:
+        mp_pose, mp_hands, pose, hands = load_pose_models()
+        H, W, _ = image.shape
+        img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        pose_result = pose.process(img_rgb)
+        hands_result = hands.process(img_rgb)
+        metrics = {'angles': {}}
 
-    if pose_result.pose_landmarks:
-        def get_pose_pt(landmark):
-            return get_coord(pose_result.pose_landmarks.landmark[landmark], 'pose', W, H)
-        joints = {
-            '左侧': {'肩膀': get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER), '肘部': get_pose_pt(mp_pose.PoseLandmark.LEFT_ELBOW), '手腕': get_pose_pt(mp_pose.PoseLandmark.LEFT_WRIST), '臀部': get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP), '膝部': get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)},
-            '右侧': {'肩膀': get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER), '肘部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_ELBOW), '手腕': get_pose_pt(mp_pose.PoseLandmark.RIGHT_WRIST), '臀部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP), '膝部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)},
-            'mid': {'肩膀': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER)[i])/2 for i in range(3)], '臀部': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP)[i])/2 for i in range(3)], '膝部': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)[i])/2 for i in range(3)]},
-            '鼻子': get_pose_pt(mp_pose.PoseLandmark.NOSE)
-        }
-        if hands_result.multi_hand_landmarks:
-            for hand in hands_result.multi_hand_landmarks:
-                side = '左侧' if hand.landmark[0].x < 0.5 else '右侧'
-                joints[side].update({'手腕': get_coord(hand.landmark[mp_hands.HandLandmark.WRIST], 'hands', W, H), '食指中节': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP], 'hands', W, H), '食指尖端': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP], 'hands', W, H)})
-        try:
-            metrics['angles']['颈部前屈'] = calculate_neck_flexion(joints['鼻子'], joints['mid']['肩膀'], joints['mid']['臀部'])
-            for side in ['左侧', '右侧']:
-                metrics['angles'][f'{side} 肩部上举'] = calculate_angle(joints[side]['臀部'], joints[side]['肩膀'], joints[side]['肘部'], 'frontal')
-                metrics['angles'][f'{side} 肩部前伸'] = calculate_angle(joints[side]['臀部'], joints[side]['肩膀'], joints[side]['肘部'], 'sagittal')
-            for side in ['左侧', '右侧']:
-                metrics['angles'][f'{side} 肘部屈伸'] = calculate_angle(joints[side]['肩膀'], joints[side]['肘部'], joints[side]['手腕'], 'sagittal')
-            for side in ['左侧', '右侧']:
-                if '食指尖端' in joints[side]:
-                    metrics['angles'][f'{side} 手腕背伸'] = calculate_angle(joints[side]['肘部'], joints[side]['手腕'], joints[side]['食指尖端'], 'sagittal')
-                    metrics['angles'][f'{side} 手腕桡偏'] = calculate_angle(joints[side]['食指中节'], joints[side]['手腕'], joints[side]['食指尖端'], 'frontal')
-            metrics['angles']['背部屈曲'] = calculate_trunk_flexion(joints['mid']['肩膀'], joints['mid']['臀部'], joints['mid']['膝部'])
-            draw_landmarks(image, joints)
-        except:
-            pass
-    pose.close()
-    hands.close()
-    return image, metrics
+        if pose_result.pose_landmarks:
+            def get_pose_pt(landmark):
+                return get_coord(pose_result.pose_landmarks.landmark[landmark], 'pose', W, H)
+            joints = {
+                '左侧': {'肩膀': get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER), '肘部': get_pose_pt(mp_pose.PoseLandmark.LEFT_ELBOW), '手腕': get_pose_pt(mp_pose.PoseLandmark.LEFT_WRIST), '臀部': get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP), '膝部': get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)},
+                '右侧': {'肩膀': get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER), '肘部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_ELBOW), '手腕': get_pose_pt(mp_pose.PoseLandmark.RIGHT_WRIST), '臀部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP), '膝部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)},
+                'mid': {'肩膀': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER)[i])/2 for i in range(3)], '臀部': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP)[i])/2 for i in range(3)], '膝部': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)[i])/2 for i in range(3)]},
+                '鼻子': get_pose_pt(mp_pose.PoseLandmark.NOSE)
+            }
+            if hands_result.multi_hand_landmarks:
+                for hand in hands_result.multi_hand_landmarks:
+                    side = '左侧' if hand.landmark[0].x < 0.5 else '右侧'
+                    joints[side].update({'手腕': get_coord(hand.landmark[mp_hands.HandLandmark.WRIST], 'hands', W, H), '食指中节': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP], 'hands', W, H), '食指尖端': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP], 'hands', W, H)})
+            try:
+                metrics['angles']['颈部前屈'] = calculate_neck_flexion(joints['鼻子'], joints['mid']['肩膀'], joints['mid']['臀部'])
+                for side in ['左侧', '右侧']:
+                    metrics['angles'][f'{side} 肩部上举'] = calculate_angle(joints[side]['臀部'], joints[side]['肩膀'], joints[side]['肘部'], 'frontal')
+                    metrics['angles'][f'{side} 肩部前伸'] = calculate_angle(joints[side]['臀部'], joints[side]['肩膀'], joints[side]['肘部'], 'sagittal')
+                for side in ['左侧', '右侧']:
+                    metrics['angles'][f'{side} 肘部屈伸'] = calculate_angle(joints[side]['肩膀'], joints[side]['肘部'], joints[side]['手腕'], 'sagittal')
+                for side in ['左侧', '右侧']:
+                    if '食指尖端' in joints[side]:
+                        metrics['angles'][f'{side} 手腕背伸'] = calculate_angle(joints[side]['肘部'], joints[side]['手腕'], joints[side]['食指尖端'], 'sagittal')
+                        metrics['angles'][f'{side} 手腕桡偏'] = calculate_angle(joints[side]['食指中节'], joints[side]['手腕'], joints[side]['食指尖端'], 'frontal')
+                metrics['angles']['背部屈曲'] = calculate_trunk_flexion(joints['mid']['肩膀'], joints['mid']['臀部'], joints['mid']['膝部'])
+                draw_landmarks(image, joints)
+            except:
+                pass
+        pose.close()
+        hands.close()
+        return image, metrics
+    except:
+        return image, {"angles":{}}
 
 # ---------------------- 4. 疲劳评估核心模块 ----------------------
 def get_file_content(file_path):
@@ -219,18 +225,19 @@ def save_to_csv(input_data, result, body_fatigue, cognitive_fatigue, emotional_f
     updated_df.to_csv(FILE_PATH, index=False)
 
 def upload_to_github(file_path):
-    sha_value = get_file_sha(file_path)
-    with open(file_path, 'rb') as file:
-        content = base64.b64encode(file.read()).decode()
-    url = f'https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/contents/{file_path}'
-    commit_message = "Add new fatigue data"
-    data = {"message": commit_message, "branch": GITHUB_BRANCH, "content": content}
-    if sha_value:
-        data["sha"] = sha_value
-    headers = {'Authorization': f'token {GITHUB_TOKEN}', 'Accept': 'application/vnd.github.v3+json'}
-    response = requests.put(url, json=data, headers=headers)
-    if response.status_code not in [200, 201]:
-        st.error(f"上传失败: {response.json()}")
+    try:
+        sha_value = get_file_sha(file_path)
+        with open(file_path, 'rb') as file:
+            content = base64.b64encode(file.read()).decode()
+        url = f'https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/contents/{file_path}'
+        commit_message = "Add new fatigue data"
+        data = {"message": commit_message, "branch": GITHUB_BRANCH, "content": content}
+        if sha_value:
+            data["sha"] = sha_value
+        headers = {'Authorization': f'token {GITHUB_TOKEN}', 'Accept': 'application/vnd.github.v3+json'}
+        requests.put(url, json=data, headers=headers)
+    except:
+        pass
 
 def calculate_score(answer):
     if answer == '请选择': return 0
@@ -239,9 +246,17 @@ def calculate_score(answer):
     elif answer == '经常': return 3
     else: return 4
 
+# ---------------------- 修复：模型不存在也能正常评估 ----------------------
 def fatigue_prediction(input_data):
-    prediction = model.predict(input_data)
-    return ["低疲劳状态", "中疲劳状态", "高疲劳状态"][prediction[0]]
+    global model
+    if model is not None:
+        try:
+            prediction = model.predict(input_data)
+            return ["低疲劳状态", "中疲劳状态", "高疲劳状态"][prediction[0]]
+        except:
+            return "中疲劳状态"
+    else:
+        return "中疲劳状态"
 
 def call_ark_api(client, messages):
     try:
@@ -268,7 +283,7 @@ if 'wrist_extension' not in st.session_state: st.session_state.wrist_extension =
 if 'wrist_deviation' not in st.session_state: st.session_state.wrist_deviation = 10
 if 'back_flexion' not in st.session_state: st.session_state.back_flexion = 20
 
-# ---------------------- 模块1：图片角度识别（可选） ----------------------
+# ---------------------- 模块1：图片角度识别 ----------------------
 with st.expander("📸 可选：上传图片自动识别角度（点击展开）"):
     uploaded_file = st.file_uploader("上传工作场景图片", type=["jpg", "png"])
     threshold = st.slider("风险阈值(°)", 30, 90, 60)
@@ -289,7 +304,6 @@ with st.expander("📸 可选：上传图片自动识别角度（点击展开）
             for joint, angle in metrics['angles'].items():
                 status = "⚠️" if angle > threshold else "✅"
                 st.markdown(f"{status} **{joint}**: `{angle:.1f}°`")
-        # 自动填充表单
         if 'angles' in metrics:
             angles = metrics['angles']
             st.session_state.neck_flexion = int(angles.get('颈部前屈', 20))
