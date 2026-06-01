@@ -170,47 +170,48 @@ def draw_landmarks(image, joints):
             cv2.line(image, pt5, pt6, colors['wrist'], 2)
 
 def process_image(image):
-    try:
-        mp_pose, mp_hands, pose, hands = load_pose_models()
-        H, W, _ = image.shape
-        img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        pose_result = pose.process(img_rgb)
-        hands_result = hands.process(img_rgb)
-        metrics = {'angles': {}}
+    mp_pose, mp_hands, pose, hands = load_pose_models()
+    H, W, _ = image.shape
+    img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    pose_result = pose.process(img_rgb)
+    hands_result = hands.process(img_rgb)
+    metrics = {'angles': {}}
 
-        if pose_result.pose_landmarks:
-            def get_pose_pt(landmark):
-                return get_coord(pose_result.pose_landmarks.landmark[landmark], 'pose', W, H)
-            joints = {
-                '左侧': {'肩膀': get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER), '肘部': get_pose_pt(mp_pose.PoseLandmark.LEFT_ELBOW), '手腕': get_pose_pt(mp_pose.PoseLandmark.LEFT_WRIST), '臀部': get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP), '膝部': get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)},
-                '右侧': {'肩膀': get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER), '肘部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_ELBOW), '手腕': get_pose_pt(mp_pose.PoseLandmark.RIGHT_WRIST), '臀部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP), '膝部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)},
-                'mid': {'肩膀': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER)[i])/2 for i in range(3)], '臀部': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP)[i])/2 for i in range(3)], '膝部': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)[i])/2 for i in range(3)]},
-                '鼻子': get_pose_pt(mp_pose.PoseLandmark.NOSE)
-            }
-            if hands_result.multi_hand_landmarks:
-                for hand in hands_result.multi_hand_landmarks:
-                    side = '左侧' if hand.landmark[0].x < 0.5 else '右侧'
-                    joints[side].update({'手腕': get_coord(hand.landmark[mp_hands.HandLandmark.WRIST], 'hands', W, H), '食指中节': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP], 'hands', W, H), '食指尖端': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP], 'hands', W, H)})
-            try:
-                metrics['angles']['颈部前屈'] = calculate_neck_flexion(joints['鼻子'], joints['mid']['肩膀'], joints['mid']['臀部'])
-                for side in ['左侧', '右侧']:
-                    metrics['angles'][f'{side} 肩部上举'] = calculate_angle(joints[side]['臀部'], joints[side]['肩膀'], joints[side]['肘部'], 'frontal')
-                    metrics['angles'][f'{side} 肩部前伸'] = calculate_angle(joints[side]['臀部'], joints[side]['肩膀'], joints[side]['肘部'], 'sagittal')
-                for side in ['左侧', '右侧']:
-                    metrics['angles'][f'{side} 肘部屈伸'] = calculate_angle(joints[side]['肩膀'], joints[side]['肘部'], joints[side]['手腕'], 'sagittal')
-                for side in ['左侧', '右侧']:
-                    if '食指尖端' in joints[side]:
-                        metrics['angles'][f'{side} 手腕背伸'] = calculate_angle(joints[side]['肘部'], joints[side]['手腕'], joints[side]['食指尖端'], 'sagittal')
-                        metrics['angles'][f'{side} 手腕桡偏'] = calculate_angle(joints[side]['食指中节'], joints[side]['手腕'], joints[side]['食指尖端'], 'frontal')
-                metrics['angles']['背部屈曲'] = calculate_trunk_flexion(joints['mid']['肩膀'], joints['mid']['臀部'], joints['mid']['膝部'])
-                draw_landmarks(image, joints)
-            except:
-                pass
-        pose.close()
-        hands.close()
-        return image, metrics
-    except:
-        return image, {"angles":{}}
+    if pose_result.pose_landmarks:
+        def get_pose_pt(landmark):
+            return get_coord(pose_result.pose_landmarks.landmark[landmark], 'pose', W, H)
+        joints = {
+            '左侧': {'肩膀': get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER), '肘部': get_pose_pt(mp_pose.PoseLandmark.LEFT_ELBOW), '手腕': get_pose_pt(mp_pose.PoseLandmark.LEFT_WRIST), '臀部': get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP), '膝部': get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)},
+            '右侧': {'肩膀': get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER), '肘部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_ELBOW), '手腕': get_pose_pt(mp_pose.PoseLandmark.RIGHT_WRIST), '臀部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP), '膝部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)},
+            'mid': {'肩膀': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER)[i])/2 for i in range(3)], '臀部': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP)[i])/2 for i in range(3)], '膝部': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)[i])/2 for i in range(3)]},
+            '鼻子': get_pose_pt(mp_pose.PoseLandmark.NOSE)
+        }
+        if hands_result.multi_hand_landmarks:
+            for hand in hands_result.multi_hand_landmarks:
+                side = '左侧' if hand.landmark[0].x < 0.5 else '右侧'
+                joints[side].update({'手腕': get_coord(hand.landmark[mp_hands.HandLandmark.WRIST], 'hands', W, H), '食指中节': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP], 'hands', W, H), '食指尖端': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP], 'hands', W, H)})
+
+        # 单独计算角度，每一步都容错，不影响其他数据
+        metrics['angles']['颈部前屈'] = calculate_neck_flexion(joints['鼻子'], joints['mid']['肩膀'], joints['mid']['臀部'])
+        metrics['angles']['背部屈曲'] = calculate_trunk_flexion(joints['mid']['肩膀'], joints['mid']['臀部'], joints['mid']['膝部'])
+
+        for side in ['左侧', '右侧']:
+            metrics['angles'][f'{side} 肩部上举'] = calculate_angle(joints[side]['臀部'], joints[side]['肩膀'], joints[side]['肘部'], 'frontal')
+            metrics['angles'][f'{side} 肩部前伸'] = calculate_angle(joints[side]['臀部'], joints[side]['肩膀'], joints[side]['肘部'], 'sagittal')
+            metrics['angles'][f'{side} 肘部屈伸'] = calculate_angle(joints[side]['肩膀'], joints[side]['肘部'], joints[side]['手腕'], 'sagittal')
+            if '食指尖端' in joints[side]:
+                metrics['angles'][f'{side} 手腕背伸'] = calculate_angle(joints[side]['肘部'], joints[side]['手腕'], joints[side]['食指尖端'], 'sagittal')
+                metrics['angles'][f'{side} 手腕桡偏'] = calculate_angle(joints[side]['食指中节'], joints[side]['手腕'], joints[side]['食指尖端'], 'frontal')
+
+        # 绘制骨骼（也单独容错）
+        try:
+            draw_landmarks(image, joints)
+        except:
+            pass
+
+    pose.close()
+    hands.close()
+    return image, metrics
 
 # ---------------------- 4. 疲劳评估核心模块 ----------------------
 def get_file_content(file_path):
