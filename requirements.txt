@@ -2,7 +2,7 @@ httpx==0.23.3
 scikit-learn
 matplotlib
 seaborn
-numpy==1.24.4
+numpy>=1.26.4
 plotly
 openpyxl>=3.0.0
 pydantic
