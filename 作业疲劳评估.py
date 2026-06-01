@@ -84,7 +84,7 @@ except:
 # ---------------------- 3. 图片角度识别模块 ----------------------
 def load_pose_models():
     mp_pose = mp.solutions.pose
-    mp_hands = mp.hands
+    mp_hands = mp.solutions.hands
     pose = mp_pose.Pose(min_detection_confidence=0.8, min_tracking_confidence=0.8)
     hands = mp_hands.Hands(min_detection_confidence=0.7, min_tracking_confidence=0.7)
     return mp_pose, mp_hands, pose, hands
