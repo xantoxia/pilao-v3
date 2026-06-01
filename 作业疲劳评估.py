@@ -22,6 +22,39 @@ import pytz
 # ---------------------- 1. 基础配置 ----------------------
 st.set_page_config(page_title="疲劳评估系统", layout="wide")
 
+# ---------------------- 页面紧凑样式（直接加在代码最前面） ----------------------
+st.markdown("""
+<style>
+/* 整体页面边距 */
+.block-container {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    max-width: 1000px;
+}
+
+/* 标题和正文间距 */
+h1, h2, h3, h4 {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* 滑块和控件之间的间距 */
+.stSlider, .stNumberInput, .stSelectbox {
+    margin-bottom: 0.3rem;
+}
+
+/* 折叠面板（图片识别）的内边距 */
+.stExpander {
+    padding: 0.2rem 1rem;
+}
+
+/* 列之间的间距 */
+div[data-testid="column"] {
+    padding: 0 0.5rem;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # GitHub 配置
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 GITHUB_USERNAME = 'xantoxia'
