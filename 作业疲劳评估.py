@@ -22,12 +22,12 @@ import pytz
 # ---------------------- 1. 基础配置 ----------------------
 st.set_page_config(page_title="疲劳评估系统", layout="wide")
 
-# ---------------------- 页面紧凑样式（直接加在代码最前面） ----------------------
+# ---------------------- 页面紧凑样式（已修复页首被遮挡问题） ----------------------
 st.markdown("""
 <style>
-/* 整体页面边距 */
+/* 整体页面边距：增加顶部内边距，避免标题被遮挡 */
 .block-container {
-    padding-top: 1rem;
+    padding-top: 2.5rem; /* 把这里从 1rem 改成 2.5rem */
     padding-bottom: 1rem;
     max-width: 1000px;
 }
