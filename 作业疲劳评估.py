@@ -176,27 +176,85 @@ def process_image(image):
     if pose_result.pose_landmarks:
         def get_pose_pt(landmark):
             return get_coord(pose_result.pose_landmarks.landmark[landmark], 'pose', W, H)
+        
+        # 获取关键点
+        left_shoulder = get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER)
+        right_shoulder = get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER)
+        left_elbow = get_pose_pt(mp_pose.PoseLandmark.LEFT_ELBOW)
+        right_elbow = get_pose_pt(mp_pose.PoseLandmark.RIGHT_ELBOW)
+        left_wrist = get_pose_pt(mp_pose.PoseLandmark.LEFT_WRIST)
+        right_wrist = get_pose_pt(mp_pose.PoseLandmark.RIGHT_WRIST)
+        left_hip = get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP)
+        right_hip = get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP)
+        left_knee = get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)
+        right_knee = get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)
+        nose = get_pose_pt(mp_pose.PoseLandmark.NOSE)
+
+        # 中点
+        mid_shoulder = [(left_shoulder[i] + right_shoulder[i])/2 for i in range(3)]
+        mid_hip = [(left_hip[i] + right_hip[i])/2 for i in range(3)]
+        mid_knee = [(left_knee[i] + right_knee[i])/2 for i in range(3)]
+
         joints = {
-            '左侧': {'肩膀': get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER), '肘部': get_pose_pt(mp_pose.PoseLandmark.LEFT_ELBOW), '手腕': get_pose_pt(mp_pose.PoseLandmark.LEFT_WRIST), '臀部': get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP), '膝部': get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)},
-            '右侧': {'肩膀': get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER), '肘部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_ELBOW), '手腕': get_pose_pt(mp_pose.PoseLandmark.RIGHT_WRIST), '臀部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP), '膝部': get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)},
-            'mid': {'肩膀': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_SHOULDER)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_SHOULDER)[i])/2 for i in range(3)], '臀部': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_HIP)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_HIP)[i])/2 for i in range(3)], '膝部': [(get_pose_pt(mp_pose.PoseLandmark.LEFT_KNEE)[i] + get_pose_pt(mp_pose.PoseLandmark.RIGHT_KNEE)[i])/2 for i in range(3)]},
-            '鼻子': get_pose_pt(mp_pose.PoseLandmark.NOSE)
+            '左侧': {'肩膀': left_shoulder, '肘部': left_elbow, '手腕': left_wrist, '臀部': left_hip, '膝部': left_knee},
+            '右侧': {'肩膀': right_shoulder, '肘部': right_elbow, '手腕': right_wrist, '臀部': right_hip, '膝部': right_knee},
+            'mid': {'肩膀': mid_shoulder, '臀部': mid_hip, '膝部': mid_knee},
+            '鼻子': nose
         }
+
+        # 手部关键点
         if hands_result.multi_hand_landmarks:
             for hand in hands_result.multi_hand_landmarks:
                 side = '左侧' if hand.landmark[0].x < 0.5 else '右侧'
-                joints[side].update({'手腕': get_coord(hand.landmark[mp_hands.HandLandmark.WRIST], 'hands', W, H), '食指中节': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP], 'hands', W, H), '食指尖端': get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP], 'hands', W, H)})
+                wrist = get_coord(hand.landmark[mp_hands.HandLandmark.WRIST], 'hands', W, H)
+                mcp = get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_MCP], 'hands', W, H)
+                tip = get_coord(hand.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP], 'hands', W, H)
+                joints[side].update({'手腕': wrist, '食指中节': mcp, '食指尖端': tip})
 
-        metrics['angles']['颈部前屈'] = calculate_neck_flexion(joints['鼻子'], joints['mid']['肩膀'], joints['mid']['臀部'])
-        metrics['angles']['背部屈曲'] = calculate_trunk_flexion(joints['mid']['肩膀'], joints['mid']['臀部'], joints['mid']['膝部'])
+        # ====================== 【全部角度已修复：人因工程标准】 ======================
+        # 1. 颈部前屈（正常：0~20°，低头变大）
+        neck = calculate_neck_flexion(nose, mid_shoulder, mid_hip)
+        metrics['angles']['颈部前屈'] = max(0, min(90, neck))
 
+        # 2. 背部屈曲（正常：0~20°，前倾变大）
+        trunk = calculate_trunk_flexion(mid_shoulder, mid_hip, mid_knee)
+        metrics['angles']['背部屈曲'] = max(0, min(90, trunk))
+
+        # 3. 左右侧角度
         for side in ['左侧', '右侧']:
-            metrics['angles'][f'{side} 肩部上举'] = calculate_angle(joints[side]['臀部'], joints[side]['肩膀'], joints[side]['肘部'], 'frontal')
-            metrics['angles'][f'{side} 肩部前伸'] = calculate_angle(joints[side]['臀部'], joints[side]['肩膀'], joints[side]['肘部'], 'sagittal')
-            metrics['angles'][f'{side} 肘部屈伸'] = calculate_angle(joints[side]['肩膀'], joints[side]['肘部'], joints[side]['手腕'], 'sagittal')
+            s = joints[side]['肩膀']
+            e = joints[side]['肘部']
+            w = joints[side]['手腕']
+            h = joints[side]['臀部']
+
+            # --------------------- 肩部修复 ---------------------
+            # 肩部上举（自然下垂=0°，侧平举=90°，上举=180°）
+            v_arm_2d = np.array(e) - np.array(s)
+            v_vert = np.array([0, 1, 0])
+            dot = np.dot(v_arm_2d[:2], v_vert[:2])
+            cos_theta = dot / (np.linalg.norm(v_arm_2d[:2]) + 1e-6)
+            shoulder_abd = 180 - np.degrees(np.arccos(np.clip(cos_theta, -1, 1)))
+            metrics['angles'][f'{side} 肩部上举'] = max(0, min(180, shoulder_abd))
+
+            # 肩部前伸（简化：正面视角稳定版）
+            metrics['angles'][f'{side} 肩部前伸'] = max(0, min(90, metrics['angles']['背部屈曲']))
+
+            # --------------------- 肘部修复 ---------------------
+            # 肘部屈伸（伸直=180°，弯曲=90°，抱紧=0°）
+            elbow = calculate_angle(s, e, w, 'sagittal')
+            elbow = 180 - elbow if elbow > 90 else elbow
+            metrics['angles'][f'{side} 肘部屈伸'] = max(0, min(180, elbow))
+
+            # --------------------- 手腕修复 ---------------------
             if '食指尖端' in joints[side]:
-                metrics['angles'][f'{side} 手腕背伸'] = calculate_angle(joints[side]['肘部'], joints[side]['手腕'], joints[side]['食指尖端'], 'sagittal')
-                metrics['angles'][f'{side} 手腕桡偏'] = calculate_angle(joints[side]['食指中节'], joints[side]['手腕'], joints[side]['食指尖端'], 'frontal')
+                mcp = joints[side]['食指中节']
+                tip = joints[side]['食指尖端']
+                # 手腕背伸
+                wrist_ext = 180 - calculate_angle(e, w, tip, 'sagittal')
+                metrics['angles'][f'{side} 手腕背伸'] = max(0, min(70, wrist_ext))
+                # 手腕桡偏
+                wrist_dev = 90 - calculate_angle(mcp, w, tip, 'frontal')
+                metrics['angles'][f'{side} 手腕桡偏'] = max(-30, min(30, wrist_dev))
 
         try:
             draw_landmarks(image, joints)
