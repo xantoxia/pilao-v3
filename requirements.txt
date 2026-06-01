@@ -2,7 +2,7 @@ httpx==0.23.3
 scikit-learn
 matplotlib
 seaborn
-numpy>=1.26.4
+numpy==1.26.4
 plotly
 openpyxl>=3.0.0
 pydantic
@@ -12,7 +12,7 @@ pillow
 pandas
 streamlit
 pytz
-mediapipe>=0.10,<0.11
+mediapipe==0.10.14
 opencv-python-headless
 protobuf==3.20.3
 pytz
