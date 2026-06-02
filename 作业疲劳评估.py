@@ -442,7 +442,7 @@ if st.sidebar.checkbox("模型性能"):
 
     # 混淆矩阵
     st.markdown("### 混淆矩阵")
-    fig_conf, ax_conf = plt.subplots(figsize=(4, 4)) 
+    fig_conf, ax_conf = plt.subplots(figsize=(3, 3)) 
     sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", ax=ax_conf)
     ax_conf.set_xlabel("Predicted")
     ax_conf.set_ylabel("Actual")
