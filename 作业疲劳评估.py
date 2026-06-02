@@ -66,6 +66,22 @@ def set_font_properties(ax, font_prop):
     ax.xaxis.label.set_fontproperties(font_prop)
     ax.yaxis.label.set_fontproperties(font_prop)
 
+from matplotlib.font_manager import FontProperties
+import os
+
+plt.rcParams['axes.unicode_minus'] = False
+
+font_path = "SourceHanSansCN-Normal.otf"
+font_prop = None
+
+if os.path.exists(font_path):
+    try:
+        font_prop = FontProperties(fname=font_path)
+        plt.rcParams['font.sans-serif'] = [font_path]
+    except:
+        font_prop = None
+else:
+    font_prop = None
 
 # ---------------------- 2. 模型加载 ----------------------
 # Load the uploaded file
