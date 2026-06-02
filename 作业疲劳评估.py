@@ -568,7 +568,7 @@ if st.sidebar.checkbox("参考标准"):
     """, unsafe_allow_html=True)
 
 # ---------------------- 6. 主页面布局 ----------------------
-st.markdown("<h1 style='text-align: center;'>疲劳评估系统（v202606）</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>作业疲劳评估及改善建议</h1>", unsafe_allow_html=True)
 st.markdown("""该工具依据国际标准ISO 11226（静态工作姿势）、美国国家职业安全健康研究所的《手动材料处理指南》以及OWAS分析与建议等多套国际标准和规范，对工作过程中的疲劳状态进行科学评估，支持「图片识别自动填数」和「手动输入角度数据」两种方式进行疲劳评估。""")
 
 # 初始化会话状态
