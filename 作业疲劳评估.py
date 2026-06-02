@@ -67,15 +67,50 @@ if os.path.exists(font_path):
     plt.rcParams['axes.unicode_minus'] = False
 
 # ---------------------- 2. 模型加载 ----------------------
-model = None
-try:
-    @st.cache_resource
-    def load_fatigue_model():
-        with open("fatigue_model.pkl", "rb") as f:
-            return pickle.load(f)
-    model = load_fatigue_model()
-except:
-    st.warning("⚠️ 模型文件未找到，将使用模拟评估结果（不影响使用）")
+# Load the uploaded file
+file_path = 'corrected_fatigue_simulation_data_Chinese.csv'
+data = pd.read_csv(file_path, encoding='gbk')
+
+# 1. Features and labels
+X = data.drop(columns=["疲劳等级"])
+y = data["疲劳等级"]
+
+# Normalize column names to avoid spaces
+X.columns = X.columns.str.replace(' ', '_')
+
+# 2. Data split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 3. Model training
+model = RandomForestClassifier(random_state=42)
+model.fit(X_train, y_train)
+
+# 4. Predictions
+y_pred = model.predict(X_test)
+
+# 5. Evaluation
+accuracy = accuracy_score(y_test, y_pred)
+conf_matrix = confusion_matrix(y_test, y_pred)
+report = classification_report(y_test, y_pred)
+
+# Feature importance
+feature_importances = model.feature_importances_
+importance_df = pd.DataFrame({
+    "Feature": X.columns,
+    "Importance": feature_importances
+}).sort_values(by="Importance", ascending=False)
+
+# Create feature importance plot
+fig, ax = plt.subplots(figsize=(10, 6))
+sns.barplot(x="Importance", y="Feature", data=importance_df, palette="viridis", ax=ax)
+ax.set_title("Feature Importance in Fatigue Classification")
+ax.set_xlabel("Importance Score")
+ax.set_ylabel("Features")
+set_font_properties(ax, font_prop)
+
+# Save model
+with open("fatigue_model.pkl", "wb") as f:
+    pickle.dump(model, f)
 
 # ---------------------- 3. 图片角度识别模块 ----------------------
 def load_pose_models():
