@@ -417,6 +417,11 @@ if st.sidebar.checkbox("模型性能"):
         </ul>
     </div>
     """, unsafe_allow_html=True)
+@st.cache_resource
+def load_model():
+    with open("fatigue_model.pkl", "rb") as f:
+        model = pickle.load(f)
+    return model
 
 if st.sidebar.checkbox("标准参考"):
     st.markdown("""
