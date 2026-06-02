@@ -358,76 +358,157 @@ def call_ark_api(client, messages):
         st.error(f"API 调用错误: {str(e)}")
 
 # ---------------------- 5. 侧边栏：模型性能 + 标准参考 ----------------------
-if st.sidebar.checkbox("📊 模型性能"):
-    st.subheader("模型性能评估")
-    try:
-        data = pd.read_csv('corrected_fatigue_simulation_data_Chinese.csv', encoding='gbk')
-        X = data.drop(columns=["疲劳等级"])
-        y = data["疲劳等级"]
-        X.columns = X.columns.str.replace(' ', '_')
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        model_eval = RandomForestClassifier(random_state=42)
-        model_eval.fit(X_train, y_train)
-        y_pred = model_eval.predict(X_test)
-        accuracy = accuracy_score(y_test, y_pred)
-        conf_matrix = confusion_matrix(y_test, y_pred)
-        report = classification_report(y_test, y_pred)
-        importance_df = pd.DataFrame({"Feature": X.columns, "Importance": model_eval.feature_importances_}).sort_values(by="Importance", ascending=False)
+if st.sidebar.checkbox("模型性能"):
+    st.subheader("📊 模型评估")
+    # 使用 st.columns 创建一列布局
+    col1 = st.columns(1)
+    # 在第一列中放置内容
+    with col1[0]:
+        st.markdown("""
+        <div style="
+            background-color: #F0F2F6;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            margin-bottom: 20px;
+        ">
+            <div style="
+                font-size: 32px;
+                font-weight: bold;
+                color: #2E86C1;
+            ">
+                {:.2f}%
+            </div>
+            <div style="
+                font-size: 16px;
+                color: #666;
+            ">
+                准确性
+            </div>
+        </div>
+        """.format(accuracy * 100), unsafe_allow_html=True)
 
-        st.metric("模型准确率", f"{accuracy*100:.2f}%")
-        st.text("分类报告：")
-        st.text(report)
+    # 混淆矩阵
+    st.markdown("### 混淆矩阵")
+    fig_conf, ax_conf = plt.subplots()
+    sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", ax=ax_conf)
+    ax_conf.set_xlabel("Predicted")
+    ax_conf.set_ylabel("Actual")
+    ax_conf.set_title("Confusion Matrix")
+    st.pyplot(fig_conf)
 
-        fig_conf, ax_conf = plt.subplots(figsize=(6,4))
-        sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", ax=ax_conf)
-        ax_conf.set_xlabel("Predicted")
-        ax_conf.set_ylabel("Actual")
-        ax_conf.set_title("混淆矩阵")
-        if font_prop:
-            for label in ax_conf.get_xticklabels() + ax_conf.get_yticklabels():
-                label.set_fontproperties(font_prop)
-        st.pyplot(fig_conf)
+    # 特征重要性
+    st.markdown("### 特征重要性")
+    st.pyplot(fig)
 
-        fig_imp, ax_imp = plt.subplots(figsize=(6,4))
-        sns.barplot(x="Importance", y="Feature", data=importance_df, palette="viridis", ax=ax_imp)
-        ax_imp.set_title("特征重要性")
-        if font_prop:
-            for label in ax_imp.get_xticklabels() + ax_imp.get_yticklabels():
-                label.set_fontproperties(font_prop)
-        st.pyplot(fig_imp)
-    except Exception as e:
-        st.warning(f"模型性能数据加载失败：{e}")
+    # 添加一些说明
+    st.markdown("""
+    <div style="
+        background-color: #E8F5E9;
+        padding: 15px;
+        border-radius: 10px;
+        color: #2E7D32;
+        margin-top: 20px;
+    ">
+        💡 提示：
+        <ul>
+            <li>混淆矩阵显示了模型的预测结果与实际标签的对比。对角线上的值表示正确预测的数量。</li>
+            <li>特征重要性图展示了每个特征对模型预测的贡献程度。</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+@st.cache_resource
 
-if st.sidebar.checkbox("📋 标准参考"):
+if st.sidebar.checkbox("标准参考"):
     st.markdown("""
     <style>
-    .section-title {font-size:18px; font-weight:bold; color:#2E86C1; margin-top:15px;}
-    .sub-section {margin-left:10px; margin-bottom:8px;}
-    .highlight {color:#E74C3C; font-weight:bold;}
+        .header {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2E86C1;
+            margin-bottom: 20px;
+        }
+        .section-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1A5276;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .sub-section {
+            margin-left: 20px;
+            margin-bottom: 10px;
+        }
+        .note {
+            font-style: italic;
+            color: #666;
+            margin-top: 5px;
+        }
+        .highlight {
+            color: #E74C3C;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 14px;
+            color: #888;
+        }
     </style>
+
+    <div class="header">人体各部位动作舒适范围参考指南</div>
+    <div class="note">为了帮助您在日常工作或活动中保持健康的姿势，减少肌肉疲劳和关节损伤风险，以下是根据国际人因工程标准（如ISO 11226、ISO 9241等）整理的人体各部位动作舒适范围建议。请参考这些数据，优化您的姿势和工作环境设计。</div>
+
     <div class="section-title">1. 颈部</div>
     <div class="sub-section">
-    - <span class="highlight">前屈：0°~20°</span><br>
-    - <span class="highlight">后仰：0°~15°</span>
+        - <span class="highlight">前屈（低头）</span>：0°~20°<br>
+          <div class="note">（长时间前屈＞20°可能导致颈椎压力累积）</div>
+        - <span class="highlight">后仰（抬头）</span>：0°~15°<br>
+          <div class="note">（＞15°可能增加颈椎间盘压力，需避免静态保持）</div>
     </div>
+
     <div class="section-title">2. 肩部</div>
     <div class="sub-section">
-    - <span class="highlight">上举：0°~90°</span><br>
-    - <span class="highlight">前伸：0°~30°</span>
+        - <span class="highlight">上举（手臂抬高）</span>：0°~90°<br>
+          <div class="note">（持续上举＞90°显著增加肩袖损伤风险，动态操作可偶尔达120°但需减少频率）</div>
+        - <span class="highlight">前伸（手臂前伸）</span>：0°~30°<br>
+          <div class="note">（＞30°易导致肩部肌肉疲劳，重复性任务应控制在15°以内）</div>
     </div>
+
     <div class="section-title">3. 肘部</div>
     <div class="sub-section">
-    - <span class="highlight">屈伸：60°~120°</span>
+        - <span class="highlight">屈伸（弯曲/伸直）</span>：60°~120°<br>
+          <div class="note">（完全伸展或过度弯曲（如＞120°）会增加肌腱压力，中立位更安全）</div>
     </div>
+
     <div class="section-title">4. 手腕</div>
     <div class="sub-section">
-    - <span class="highlight">背伸：0°~25°</span><br>
-    - <span class="highlight">桡偏/尺偏：0°~15°</span>
+        - <span class="highlight">背伸（手腕向上）</span>：0°~25°<br>
+          <div class="note">（＞25°可能压迫腕管，ISO建议保持中立位附近）</div>
+        - <span class="highlight">桡偏/尺偏（左右偏转）</span>：0°~15°<br>
+          <div class="note">（超过15°容易造成腕管综合征或肌腱问题，需避免重复性极端偏转）</div>
     </div>
-    <div class="section-title">5. 背部</div>
+
+    <div class="section-title">5. 背部（腰椎）</div>
     <div class="sub-section">
-    - <span class="highlight">屈曲：0°~20°</span>
+        - <span class="highlight">屈曲（弯腰）</span>：0°~20°<br>
+          <div class="note">（＞20°显著增加椎间盘压力，需配合髋关节活动以减少负荷）</div>
     </div>
+
+    <div class="section-title">附加建议</div>
+    <div class="sub-section">
+        - <span class="highlight">动态任务</span>：优先采用中关节活动范围（如肩部上举60°~90°），避免极端姿势。<br>
+        - <span class="highlight">静态保持</span>：任何姿势超过2分钟需设计支撑（如肘托、腰靠）。<br>
+        - <span class="highlight">人机交互</span>：调整工作站高度、键盘倾斜度等，使关节自然接近中立位。
+    </div>
+
+    <div class="section-title">健康建议</div>
+    <div class="sub-section">
+        - 定期调整姿势，避免长时间保持同一姿势。<br>
+        - 使用符合人因工程设计的工具和设备（如可调节桌椅、腕托等）。<br>
+        - 结合适当的伸展运动，缓解肌肉疲劳。
+    </div>
+
+    <div class="footer">通过遵循以上建议，您可以有效减少肌肉骨骼疾病的风险，提升工作效率和舒适度。</div>
     """, unsafe_allow_html=True)
 
 # ---------------------- 6. 主页面布局 ----------------------
