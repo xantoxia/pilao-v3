@@ -66,17 +66,6 @@ def set_font_properties(ax, font_prop):
     ax.xaxis.label.set_fontproperties(font_prop)
     ax.yaxis.label.set_fontproperties(font_prop)
 
-# ====================== 字体配置（永不报错版） ======================
-plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-try:
-    # 尝试加载中文字体（本地/服务器有字体时生效）
-    plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']
-except:
-    # 失败就用默认字体，保证不崩溃
-    plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
-
-# 禁用原来的 font_prop / font_name 逻辑，防止报错
-font_prop = None
 
 # ---------------------- 2. 模型加载 ----------------------
 # Load the uploaded file
