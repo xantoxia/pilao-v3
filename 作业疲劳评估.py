@@ -475,7 +475,7 @@ def load_model():
         model = pickle.load(f)
     return model
 
-if st.sidebar.checkbox("标准参考"):
+if st.sidebar.checkbox("参考标准"):
     st.markdown("""
     <style>
         .header {
